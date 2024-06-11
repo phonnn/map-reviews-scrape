@@ -1,9 +1,9 @@
 import asyncio
 import os
 
-from src.reader import InputReader
-from src.writer import OutputWriter
-from src.scraper import Scraper
+from src.services.reader import InputReader
+from src.services.writer import OutputWriter
+from src.services.scraper import Scraper
 
 
 class ReviewsProcessor:
@@ -36,3 +36,4 @@ class ReviewsProcessor:
 
         if start_from + len(results) == len(urls):
             self.reset_checkpoint()
+

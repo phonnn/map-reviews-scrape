@@ -1,6 +1,9 @@
 import aiohttp
 import re
+import logging
 from bs4 import BeautifulSoup
+
+logger = logging.getLogger(__name__)
 
 
 class Scraper:
@@ -14,9 +17,12 @@ class HTMLScraper(Scraper):
 
         async with (aiohttp.ClientSession() as session):
             redirect_url = ''
-            async with session.get(url, allow_redirects=False) as response:
-                location = str(response).split("Location': \'")[1].split("\'")[0]
-                redirect_url = location.replace('hl=vi', 'hl=en')
+            try:
+                async with session.get(url, allow_redirects=False) as response:
+                    location = str(response).split("Location': \'")[1].split("\'")[0]
+                    redirect_url = location.replace('hl=vi', 'hl=en')
+            except Exception as e:
+                logger.error(e)
 
             if not redirect_url:
                 return [url, 'Error', 'Error', 'Error']
@@ -49,3 +55,10 @@ class HTMLScraper(Scraper):
                         return result
 
         return result
+
+
+# if __name__ == '__main__':
+#     import asyncio
+#     a = HTMLScraper()
+#     b = asyncio.run(a.extract_reviews('https://goo.gl/maps/hAtDDEUiozVVUWQd6'))
+#     print(b)

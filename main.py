@@ -1,10 +1,10 @@
 import argparse
 import asyncio
 
-from src.reader import TXTReader
-from src.writer import CSVWriter
-from src.scraper import HTMLScraper
-from src.processor import ReviewsProcessor
+from src.services.reader import TXTReader
+from src.services.writer import CSVWriter
+from src.services.scraper import HTMLScraper
+from src.services.processor import ReviewsProcessor
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Process reviews from input URLs and write to CSV.')
