@@ -1,3 +1,6 @@
+from asyncio import sleep
+from datetime import datetime, timedelta
+
 import aiohttp
 import re
 import logging
@@ -12,17 +15,21 @@ class Scraper:
 
 
 class HTMLScraper(Scraper):
+    def __init__(self):
+        self.last_request = datetime.now()
+
     async def extract_reviews(self, url):
         result = [url, 'Deleted', 'Deleted', 'Deleted']
 
+        now = datetime.now()
+        if now - self.last_request < timedelta(seconds=1):
+            await sleep(0.5)
+
         async with (aiohttp.ClientSession() as session):
             redirect_url = ''
-            try:
-                async with session.get(url, allow_redirects=False) as response:
-                    location = str(response).split("Location': \'")[1].split("\'")[0]
-                    redirect_url = location.replace('hl=vi', 'hl=en')
-            except Exception as e:
-                logger.error(e)
+            async with session.get(url, allow_redirects=False) as response:
+                location = str(response).split("Location': \'")[1].split("\'")[0]
+                redirect_url = location.replace('hl=vi', 'hl=en')
 
             if not redirect_url:
                 return [url, 'Error', 'Error', 'Error']

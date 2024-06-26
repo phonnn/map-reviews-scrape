@@ -1,27 +1,33 @@
+#!/usr/bin/env python3
+# rand.py
+
 import asyncio
-import aiohttp
+import random
 
+# ANSI colors
+c = (
+    "\033[0m",   # End of color
+    "\033[36m",  # Cyan
+    "\033[91m",  # Red
+    "\033[35m",  # Magenta
+)
 
-async def post(url, data=None, headers=None, params=None):
-    async with aiohttp.ClientSession() as session:
-        async with session.post(url, json=data, headers=headers, params=params) as response:
-            if response.status == 200:
-                content_type = response.headers.get('Content-Type', '').lower()
-                if 'application/json' in content_type:
-                    return await response.json()
-                elif 'text/html' in content_type:
-                    return await response.text()
-                else:
-                    return await response.read()
-            raise Exception(f"Failed to post to {url}: Status code {response.status}")
+async def makerandom(idx: int, threshold: int = 6) -> int:
+    print(c[idx + 1] + f"Initiated makerandom({idx}) -- threshold: {threshold}")
+    i = random.randint(0, 10)
+    while i <= threshold:
+        print(c[idx + 1] + f"makerandom({idx}) == {i} too low; retrying.")
+        await asyncio.sleep(idx + 1)
+        i = random.randint(0, 10)
+    print(c[idx + 1] + f"---> Finished: makerandom({idx}) == {i}" + c[0])
+    return i
 
+async def main():
+    res = await asyncio.gather(*(makerandom(i, 10 - i - 1) for i in range(3)))
+    return res
 
-if __name__ == '__main__':
-
-    urls = ['https://maps.app.goo.gl/2pESDWwG8kqeDM2i8', 'https://goo.gl/maps/hAtDDEUiozVVUWQd6']
-    for url in urls:
-        asyncio.run(redis.push({'request_id': request_id, 'url': url, 'retry': 0}))
-
-    exists = asyncio.run(redis.exists(request_id))
-    if not exists:
-        asyncio.run(redis.set(request_id, len(urls)))
+if __name__ == "__main__":
+    random.seed(444)
+    r1, r2, r3 = asyncio.run(main())
+    print()
+    print(f"r1: {r1}, r2: {r2}, r3: {r3}")

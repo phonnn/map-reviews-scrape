@@ -1,4 +1,5 @@
 import csv
+import os
 
 
 class OutputWriter:
@@ -8,11 +9,16 @@ class OutputWriter:
 
 class CSVWriter(OutputWriter):
     def write(self, *args):
-        if len(args) != 1 or not isinstance(args[0], str):
+        if len(args) != 2 or not isinstance(args[0], str):
             raise ValueError("CSVWriter requires 2 arguments")
 
         file_path = args[0]
-        data = args[0]
+        data = args[1]
+
+        directory = os.path.dirname(file_path)
+        if directory and not os.path.exists(directory):
+            os.makedirs(directory)
+
         with open(file_path, 'w', newline='', encoding='utf-8-sig') as output_csv:
             csv_writer = csv.writer(output_csv)
             csv_writer.writerow(['URL', 'Location', 'Reviewer', 'Content'])  # Write header to CSV
