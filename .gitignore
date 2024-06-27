@@ -162,3 +162,5 @@ cython_debug/
 output_reviews.csv
 LinkGM.txt
 demo.txt
+reviews.db
+temp/

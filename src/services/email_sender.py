@@ -36,16 +36,3 @@ class EmailSender:
                 message.attach(part)
 
         await self.client.send_message(message)
-
-
-
-# # sender_email = "k79pro@gmail.com"
-# # password = "clol hprx vsxi nxxv"
-# # recipient_email = "hungphongk97@gmail.com"
-# # subject = "Hello from Python"
-# # body = "with attachment"
-#
-# sender = EmailSender('smtp.gmail.com', 587, 'k79pro@gmail.com', 'clol hprx vsxi nxxv')
-# sender.connect()
-# file_path = f'../../temp/hungphongk97@gmail.com.csv'
-# sender.send_email('hungphongk97@gmail.com', 'Test Subject', '<h1>Test Body</h1>', file_path)
