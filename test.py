@@ -1,33 +1,64 @@
-#!/usr/bin/env python3
-# rand.py
-
-import asyncio
+import requests
 import random
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
-# ANSI colors
-c = (
-    "\033[0m",   # End of color
-    "\033[36m",  # Cyan
-    "\033[91m",  # Red
-    "\033[35m",  # Magenta
-)
+def read_urls(file_path):
+    with open(file_path, 'r') as file:
+        urls = file.read().splitlines()
+    return urls
 
-async def makerandom(idx: int, threshold: int = 6) -> int:
-    print(c[idx + 1] + f"Initiated makerandom({idx}) -- threshold: {threshold}")
-    i = random.randint(0, 10)
-    while i <= threshold:
-        print(c[idx + 1] + f"makerandom({idx}) == {i} too low; retrying.")
-        await asyncio.sleep(idx + 1)
-        i = random.randint(0, 10)
-    print(c[idx + 1] + f"---> Finished: makerandom({idx}) == {i}" + c[0])
-    return i
+def select_random_urls(urls, num_urls):
+    return random.sample(urls, num_urls)
 
-async def main():
-    res = await asyncio.gather(*(makerandom(i, 10 - i - 1) for i in range(3)))
-    return res
+def send_post_request(email, urls):
+    payload = {
+        'email': email,
+        'urls': urls
+    }
+    url = 'http://127.0.0.1:5000/scrape'
+    return requests.post(url, json=payload)
 
-if __name__ == "__main__":
-    random.seed(444)
-    r1, r2, r3 = asyncio.run(main())
-    print()
-    print(f"r1: {r1}, r2: {r2}, r3: {r3}")
+def simulate_client_action(email, urls):
+    num_urls = random.randint(1, 50)
+    selected_urls = select_random_urls(urls, num_urls)
+    response = send_post_request(email, selected_urls)
+
+    if response.status_code == 200:
+        try:
+            data = response.json()
+            request_id = data.get('request_id')
+            if request_id:
+                print(f'{request_id} -- {num_urls}')
+
+            else:
+                print('No request_id found in response')
+        except ValueError:
+            print('Response is not valid JSON')
+    else:
+        print(f'Request failed with status code {response.status_code}')
+
+
+# File path to the urls.txt file
+file_path = 'urls.txt'
+
+# Read URLs from the file
+urls = read_urls(file_path)
+
+# Number of clients to simulate
+num_clients = 10
+
+# List of emails to use for each client
+emails = [f'hungphong9a@gmail.com' for i in range(num_clients)]
+
+# Create a ThreadPoolExecutor to simulate multiple clients
+with ThreadPoolExecutor(max_workers=num_clients) as executor:
+    futures = []
+    for email in emails:
+        futures.append(executor.submit(simulate_client_action, email, urls))
+
+# Wait for all futures to complete
+for future in futures:
+    future.result()
+
+print("Simulated client actions completed.")

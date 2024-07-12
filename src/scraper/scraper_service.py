@@ -1,29 +1,19 @@
-from asyncio import sleep
-from datetime import datetime, timedelta
-
 import aiohttp
 import re
 import logging
 from bs4 import BeautifulSoup
 
+from . import IScraper
+from src.utils import singleton
+
+
 logger = logging.getLogger(__name__)
 
 
-class Scraper:
-    def extract_reviews(self, url):
-        raise NotImplementedError("Subclasses must implement this method.")
-
-
-class HTMLScraper(Scraper):
-    def __init__(self):
-        self.last_request = datetime.now()
-
-    async def extract_reviews(self, url):
-        result = [url, 'Deleted', 'Deleted', 'Deleted']
-
-        now = datetime.now()
-        if now - self.last_request < timedelta(seconds=1):
-            await sleep(0.5)
+@singleton
+class HTMLScraper(IScraper):
+    async def scrape(self, url):
+        result = {'url': url, 'location': 'Deleted', 'reviewer': 'Deleted', 'content': 'Deleted'}
 
         async with (aiohttp.ClientSession() as session):
             redirect_url = ''
@@ -32,7 +22,7 @@ class HTMLScraper(Scraper):
                 redirect_url = location.replace('hl=vi', 'hl=en')
 
             if not redirect_url:
-                return [url, 'Error', 'Error', 'Error']
+                return {'url': url, 'location': 'Error', 'reviewer': 'Error', 'content': 'Error'}
 
             async with session.get(redirect_url) as response:
                 if response.status == 200:
@@ -48,24 +38,17 @@ class HTMLScraper(Scraper):
                         reviews_title = reviews_title.split(' by ')
 
                         if len(reviews_title) > 1:
-                            result[1] = ' '.join(reviews_title[:-1])
-                            result[2] = reviews_title[-1]
+                            result['location'] = ' '.join(reviews_title[:-1])
+                            result['reviewer'] = reviews_title[-1]
                         else:
-                            result[1] = ' '.join(reviews_title)
+                            result['location'] = ' '.join(reviews_title)
 
                     if review_content_meta:
                         review_content = review_content_meta.get('content')
 
                         pattern = r'★{0,5} \"?(.+)\"$'
                         clean_review_content = re.sub(pattern, r'\1', review_content)
-                        result[3] = clean_review_content
+                        result['content'] = clean_review_content
                         return result
 
         return result
-
-
-# if __name__ == '__main__':
-#     import asyncio
-#     a = HTMLScraper()
-#     b = asyncio.run(a.extract_reviews('https://goo.gl/maps/hAtDDEUiozVVUWQd6'))
-#     print(b)
