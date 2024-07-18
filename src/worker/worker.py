@@ -141,8 +141,10 @@ class Publisher(Worker):
                     record.status = ProgressStatus.DONE
 
             self.db.session.commit()
-            self.send_mail(request_id)
-            self.clean(request_id)
+
+            if not pending:
+                self.send_mail(request_id)
+                self.clean(request_id)
 
     def send_mail(self, request_id):
         if self.sender is not None:
