@@ -1,12 +1,13 @@
 pipeline {
-    agent any
 
-    environment {
-      DOCKER_IMAGE = "map-reviews"
-    }
+  agent any
 
+  environment {
+    DOCKER_IMAGE = "map-reviews"
+  }
 
-    stages("build") {
+  stages {
+    stage("build") {
       agent { node {label 'master'}}
       environment {
         DOCKER_TAG="${GIT_BRANCH.tokenize('/').pop()}-${GIT_COMMIT.substring(0,7)}"
@@ -25,16 +26,14 @@ pipeline {
         sh "docker image rm ${DOCKER_IMAGE}:latest"
       }
     }
+  }
 
-    post {
-        always {
-            sh 'docker-compose down'
-        }
-        success {
-            echo 'Pipeline succeeded!'
-        }
-        failure {
-            echo 'Pipeline failed!'
-        }
+  post {
+    success {
+      echo "SUCCESSFUL"
     }
+    failure {
+      echo "FAILED"
+    }
+  }
 }
