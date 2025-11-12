@@ -85,7 +85,11 @@ class AppStateHTMLScraper(IScraper):
             description = content_meta.get('content')
             if description:
                 pattern = r'★{0,5} \"?(.+)\"$'
-                extracted['content'] = re.sub(pattern, r'\1', description)
+                cleaned = re.sub(pattern, r'\1', description).strip()
+                if cleaned and not all(ch == '★' for ch in cleaned):
+                    extracted['content'] = cleaned
+                else:
+                    extracted['content'] = None
 
         return extracted
 
@@ -112,7 +116,6 @@ class AppStateHTMLScraper(IScraper):
             'location': None,
             'reviewer': None,
             'content': None,
-            'rating': None,
         }
 
         # Share card metadata contains the place/reviewer string and the star glyphs
@@ -124,9 +127,6 @@ class AppStateHTMLScraper(IScraper):
                 location, reviewer = self._parse_title_string(title)
                 extracted['location'] = location or extracted['location']
                 extracted['reviewer'] = reviewer or extracted['reviewer']
-                if isinstance(description, str):
-                    star_count = description.count('★')
-                    extracted['rating'] = str(star_count) if star_count else extracted['rating']
         except (IndexError, TypeError):
             logger.debug("APP_INITIALIZATION_STATE share metadata layout differs from expectations")
 
@@ -261,7 +261,32 @@ class AppStateHTMLScraper(IScraper):
     def _looks_like_natural_language(self, text: str) -> bool:
         if not text:
             return False
-        sample = text.lower()
-        keywords = ['review', 'service', 'google', 'experience', 'staff']
-        score = sum(1 for keyword in keywords if keyword in sample)
-        return score >= 2 or (len(sample.split()) > 6 and any(c.isalpha() for c in sample))
+
+        stripped = text.strip()
+        if len(stripped) < 20:
+            return False
+
+        words = stripped.split()
+        if len(words) < 5:
+            return False
+
+        alpha_chars = sum(1 for c in stripped if c.isalpha())
+        if alpha_chars / max(len(stripped), 1) < 0.6:
+            return False
+
+        vowels = sum(1 for c in stripped.lower() if c in 'aeiou')
+        if vowels < alpha_chars * 0.2:
+            return False
+
+        if not any(char.isspace() for char in stripped[:50]):
+            return False
+
+        sample = stripped.lower()
+        keywords = ['review', 'service', 'google', 'experience', 'staff', 'place', 'clean', 'friendly']
+        if any(keyword in sample for keyword in keywords):
+            return True
+
+        if any(punct in stripped for punct in ('.', '!', '?')):
+            return True
+
+        return False
