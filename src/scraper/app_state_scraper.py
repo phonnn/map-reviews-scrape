@@ -278,6 +278,9 @@ class AppStateHTMLScraper(IScraper):
             return None
 
     def _parse_review_rpc_response(self, payload: str) -> Dict[str, Optional[str]]:
+        if not payload or not payload.strip():
+            return {}
+
         if payload.startswith(")]}'"):
             payload = payload[4:]
 
