@@ -120,6 +120,18 @@ class AppStateHTMLScraper(IScraper):
         session: aiohttp.ClientSession,
         referer: str,
     ) -> Dict[str, Optional[str]]:
+        extracted = self._extract_review_from_state(state)
+
+        tokens = self._parse_review_tokens(state)
+        if tokens and (extracted.get('content') is None or extracted.get('reviewer') is None):
+            rpc_values = await self._hydrate_review(session, referer, *tokens)
+            for key, value in rpc_values.items():
+                if value:
+                    extracted[key] = value
+
+        return {key: value for key, value in extracted.items() if value is not None}
+
+    def _extract_review_from_state(self, state: list) -> Dict[str, Optional[str]]:
         extracted: Dict[str, Optional[str]] = {
             'location': None,
             'reviewer': None,
@@ -144,14 +156,42 @@ class AppStateHTMLScraper(IScraper):
         except (IndexError, TypeError):
             logger.debug("bfkj payload slot not found in APP_INITIALIZATION_STATE")
 
-        tokens = self._parse_review_tokens(state)
-        if tokens and (extracted.get('content') is None or extracted.get('reviewer') is None):
-            rpc_values = await self._hydrate_review(session, referer, *tokens)
-            for key, value in rpc_values.items():
-                if value:
-                    extracted[key] = value
+        # direct review text (post-hydrated or pre-rendered)
+        text = self._extract_primary_review_text(state)
+        if text:
+            extracted['content'] = text
 
-        return {key: value for key, value in extracted.items() if value is not None}
+        # reviewer info in hydrated state
+        reviewer = self._extract_primary_reviewer(state)
+        if reviewer:
+            extracted['reviewer'] = reviewer
+
+        return extracted
+
+    def _extract_primary_review_text(self, state: list) -> Optional[str]:
+        try:
+            translations = state[7][2][15]
+            if isinstance(translations, list):
+                for entry in translations:
+                    if isinstance(entry, list) and entry:
+                        text_candidate = entry[0]
+                        if isinstance(text_candidate, str) and text_candidate.strip():
+                            return text_candidate.strip()
+        except (IndexError, TypeError):
+            return None
+        return None
+
+    def _extract_primary_reviewer(self, state: list) -> Optional[str]:
+        try:
+            reviewer = state[7][1][5][5][0]
+        except (IndexError, TypeError):
+            return None
+
+        if isinstance(reviewer, str):
+            reviewer = reviewer.strip()
+            return reviewer or None
+
+        return None
 
     def _parse_review_tokens(self, state: list) -> Optional[Tuple[str, str, str]]:
         try:
@@ -280,6 +320,12 @@ class AppStateHTMLScraper(IScraper):
     def _parse_review_rpc_response(self, payload: str) -> Dict[str, Optional[str]]:
         if not payload or not payload.strip():
             return {}
+
+        if '<html' in payload.lower() or 'APP_INITIALIZATION_STATE=' in payload:
+            state = self._load_app_state(payload)
+            if state is None:
+                return {}
+            return self._extract_review_from_state(state)
 
         if payload.startswith(")]}'"):
             payload = payload[4:]
