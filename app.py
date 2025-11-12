@@ -8,7 +8,7 @@ load_dotenv()
 from src.app_services.scrape import make_task
 from src.datastore.models import db, Request, Progress, Review
 from src import create_app
-from src.scraper.scraper_service import HTMLScraper
+from src.scraper.app_state_scraper import AppStateHTMLScraper
 from src.worker.queue import RedisQueue
 from src.worker.worker import ScrapeWorker, Publisher
 from src.writer.writer import CSVWriter
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 app = create_app()
 
 redis = RedisQueue(host=app.config['REDIS_HOST'])
-scraper = HTMLScraper()
+scraper = AppStateHTMLScraper()
 worker = ScrapeWorker(redis, scraper, db)
 
 writer = CSVWriter()
