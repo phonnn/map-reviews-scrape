@@ -6,6 +6,7 @@ import logging
 import re
 import string
 from typing import Callable, Dict, Iterable, Optional, Tuple
+from urllib.parse import quote
 
 from bs4 import BeautifulSoup
 
@@ -26,6 +27,7 @@ class AppStateHTMLScraper(IScraper):
     async def scrape(self, url: str) -> Dict[str, str]:
         result = {'url': url, 'location': 'Deleted', 'reviewer': 'Deleted', 'content': 'Deleted'}
 
+        html = ''
         async with aiohttp.ClientSession() as session:
             redirect_url = await self._resolve_review_redirect(session, url)
             if not redirect_url:
@@ -144,7 +146,7 @@ class AppStateHTMLScraper(IScraper):
 
         tokens = self._parse_review_tokens(state)
         if tokens and (extracted.get('content') is None or extracted.get('reviewer') is None):
-            rpc_values = await self._hydrate_review_via_rpc(session, referer, *tokens)
+            rpc_values = await self._hydrate_review(session, referer, *tokens)
             for key, value in rpc_values.items():
                 if value:
                     extracted[key] = value
@@ -165,84 +167,26 @@ class AppStateHTMLScraper(IScraper):
         if not isinstance(place_token, str) or not place_token:
             return None
 
-        review_token_array = review_bundle[2]
-        review_token = None
-        if isinstance(review_token_array, list) and review_token_array:
-            review_token = review_token_array[0]
-
-        if not isinstance(review_token, str) or '|' not in review_token:
+        canonical_ids = review_bundle[1]
+        canonical_id = canonical_ids[0] if isinstance(canonical_ids, list) and canonical_ids else None
+        if not isinstance(canonical_id, str) or not canonical_id:
             return None
 
-        proto_part, cluster_part, *_rest = review_token.split('|') + [None, None]
-        if not proto_part or ':' not in proto_part:
+        review_tokens = review_bundle[2]
+        review_token = review_tokens[0] if isinstance(review_tokens, list) and review_tokens else None
+        if not isinstance(review_token, str) or not review_token:
             return None
 
-        encoded_review = proto_part.split(':', 1)[1]
-        review_id = self._extract_review_id(encoded_review)
-        cluster_id = self._decode_cluster_id(cluster_part)
+        return place_token, canonical_id, review_token
 
-        if review_id and cluster_id:
-            return place_token, review_id, cluster_id
-
-        return None
-
-    def _extract_review_id(self, encoded: Optional[str]) -> Optional[str]:
-        if not encoded:
-            return None
-        padded = encoded + '=' * (-len(encoded) % 4)
-        try:
-            decoded = base64.b64decode(padded)
-        except (ValueError, binascii.Error):
-            return None
-
-        text = decoded.decode('utf-8', errors='ignore')
-        marker = 'rp_'
-        if marker not in text:
-            return None
-
-        start = text.index(marker)
-        end = len(text)
-        for delimiter in ('\x00', '"', "'", '\\'):
-            idx = text.find(delimiter, start)
-            if idx != -1:
-                end = min(end, idx)
-
-        review_id = text[start:end].strip()
-        return review_id or None
-
-    def _decode_cluster_id(self, encoded: Optional[str]) -> Optional[str]:
-        if not encoded:
-            return None
-        padded = encoded + '=' * (-len(encoded) % 4)
-        try:
-            raw = base64.b64decode(padded)
-        except (ValueError, binascii.Error):
-            return None
-
-        if not raw:
-            return None
-
-        cluster_int = int.from_bytes(raw, byteorder='big', signed=False)
-        return str(cluster_int)
-
-    async def _hydrate_review_via_rpc(
+    async def _hydrate_review(
         self,
         session: aiohttp.ClientSession,
         referer: str,
         place_token: str,
-        review_id: str,
-        cluster_id: str,
+        canonical_place_id: str,
+        review_token: str,
     ) -> Dict[str, Optional[str]]:
-        pb = self._build_review_rpc_pb(place_token, review_id, cluster_id)
-        if not pb:
-            return {}
-
-        params = {
-            'authuser': '0',
-            'hl': 'en',
-            'gl': 'us',
-            'pb': pb,
-        }
         headers = {
             'Referer': referer,
             'X-Same-Domain': '1',
@@ -250,6 +194,73 @@ class AppStateHTMLScraper(IScraper):
                 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
                 '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             ),
+        }
+
+        pb = self._build_reviews_data_pb(place_token, canonical_place_id, review_token)
+        payload = await self._request_reviews_data(
+            session,
+            headers,
+            pb,
+        )
+        if not payload:
+            payload = await self._request_reviews_preview(
+                session,
+                headers,
+                pb,
+            )
+
+        if not payload:
+            return {}
+
+        return self._parse_review_rpc_response(payload)
+
+    def _build_reviews_data_pb(
+        self,
+        place_token: str,
+        canonical_place_id: str,
+        review_token: str,
+    ) -> str:
+        return (
+            f'!4m8!14m7!1m6!2m5'
+            f'!1s{place_token}'
+            f'!2m1!1s{canonical_place_id}'
+            f'!3m1!1s{review_token}'
+        )
+
+    async def _request_reviews_data(
+        self,
+        session: aiohttp.ClientSession,
+        headers: Dict[str, str],
+        pb: str,
+    ) -> Optional[str]:
+        encoded_pb = quote(pb, safe='!:@|')
+        url = f'https://www.google.com/maps/reviews/data={encoded_pb}'
+        params = {
+            'hl': 'en',
+            'gl': 'us',
+        }
+
+        try:
+            async with session.get(url, params=params, headers=headers) as response:
+                if response.status != 200:
+                    logger.debug("Review data endpoint fetch failed: %s", response.status)
+                    return None
+                return await response.text()
+        except aiohttp.ClientError as exc:
+            logger.debug("Review data endpoint errored: %s", exc)
+            return None
+
+    async def _request_reviews_preview(
+        self,
+        session: aiohttp.ClientSession,
+        headers: Dict[str, str],
+        pb: str,
+    ) -> Optional[str]:
+        params = {
+            'authuser': '0',
+            'hl': 'en',
+            'gl': 'us',
+            'pb': pb,
         }
 
         try:
@@ -260,23 +271,11 @@ class AppStateHTMLScraper(IScraper):
             ) as response:
                 if response.status != 200:
                     logger.debug("Review RPC fetch failed: %s", response.status)
-                    return {}
-                payload = await response.text()
+                    return None
+                return await response.text()
         except aiohttp.ClientError as exc:
             logger.debug("Review RPC request errored: %s", exc)
-            return {}
-
-        return self._parse_review_rpc_response(payload)
-
-    def _build_review_rpc_pb(self, place_token: str, review_id: str, cluster_id: str) -> Optional[str]:
-        if not (place_token and review_id and cluster_id):
             return None
-
-        return (
-            f'!1m2!1u{cluster_id}!2s{place_token}'
-            f'!2m2!1i0!2i10'
-            f'!3m2!1s{review_id}!2i1'
-        )
 
     def _parse_review_rpc_response(self, payload: str) -> Dict[str, Optional[str]]:
         if payload.startswith(")]}'"):
