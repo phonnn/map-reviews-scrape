@@ -176,9 +176,22 @@ class AppStateHTMLScraper(IScraper):
                     if isinstance(entry, list) and entry:
                         text_candidate = entry[0]
                         if isinstance(text_candidate, str) and text_candidate.strip():
-                            return text_candidate.strip()
+                            stripped = text_candidate.strip()
+                            if self._looks_like_natural_language(stripped):
+                                return stripped
         except (IndexError, TypeError):
-            return None
+            pass
+
+        stack = [state]
+        while stack:
+            node = stack.pop()
+            if isinstance(node, list):
+                if node and isinstance(node[0], str):
+                    stripped = node[0].strip()
+                    if stripped and self._looks_like_natural_language(stripped):
+                        return stripped
+                stack.extend(node)
+
         return None
 
     def _extract_primary_reviewer(self, state: list) -> Optional[str]:
@@ -190,6 +203,21 @@ class AppStateHTMLScraper(IScraper):
         if isinstance(reviewer, str):
             reviewer = reviewer.strip()
             return reviewer or None
+
+        stack = [state]
+        while stack:
+            node = stack.pop()
+            if isinstance(node, list):
+                if (
+                    len(node) >= 2
+                    and isinstance(node[0], str)
+                    and isinstance(node[1], str)
+                    and 'googleusercontent.com' in node[1]
+                ):
+                    candidate = node[0].strip()
+                    if candidate:
+                        return candidate
+                stack.extend(node)
 
         return None
 
