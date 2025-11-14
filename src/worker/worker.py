@@ -35,7 +35,7 @@ class ScrapeWorker(Worker):
                     item = await self.queue.pop('scrape')
                     await self.on_data(item)
                 except Exception as e:
-                    logger.debug(e)
+                    logger.debug(f'Worker error: {e}')
 
                 await asyncio.sleep(0)
 
@@ -78,8 +78,12 @@ class ScrapeWorker(Worker):
         return set([record.url for record in priority_task])
 
     async def do_task(self):
+        _now = datetime.now()
+        if _now - self.last_gather < timedelta(milliseconds=500):
+            return
+
         cond1 = len(self.pending_urls) >= 50
-        cond2 = (datetime.now() - self.last_gather > timedelta(seconds=10)) and len(self.pending_urls) > 0
+        cond2 = (_now - self.last_gather > timedelta(seconds=10)) and len(self.pending_urls) > 0
         if cond1 or cond2:
             self.last_gather = datetime.now()
             urls_to_process = self.pop_items(50)
@@ -95,7 +99,6 @@ class ScrapeWorker(Worker):
 
             self.db.session.commit()
 
-
 class Publisher(Worker):
     def __init__(self, queue: MQueue, db: SQLAlchemy, writer: OutputWriter = None, sender: Mail = None):
         self.queue = queue
@@ -109,12 +112,16 @@ class Publisher(Worker):
                 try:
                     self.notify()
                 except Exception as e:
-                    logger.debug(e)
+                    logger.debug(f'Publisher error: {e}')
+
 
                 await asyncio.sleep(0)
 
     async def start(self, item: dict):
         pass
+
+    def registerMailService(self, mailService: Mail = None):
+        self.sender = mailService
 
     def get_notify(self):
         query = self.db.session.query(distinct(Progress.request_id)).filter(
@@ -149,8 +156,8 @@ class Publisher(Worker):
     def send_mail(self, request_id):
         if self.sender is not None:
             request = self.db.session.query(Request).filter_by(id=request_id).first()
-            subject = 'Test Subject'
-            boby = '<h1>Test Body</h1>'
+            subject = 'Google map reviews'
+            boby = '<h1>See more in attachment</h1>'
             attachment = f'./temp/{request_id}.csv'
             send_email_with_attachment(self.sender, request.email, subject, boby, attachment)
 

@@ -25,7 +25,7 @@ def bulk_insert_or_update(db: SQLAlchemy, values):
         db.session.execute(stmt)
         db.session.commit()
     except Exception as e:
-        logger.debug(e)
+        logger.debug(f'Insert or update error: {e}')
 
 
 def model_to_list(model_obj, *args):

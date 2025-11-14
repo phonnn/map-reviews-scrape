@@ -10,5 +10,6 @@ services:
 
   redis:
     image: redis
+    restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "6380:6379"
