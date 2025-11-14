@@ -1,6 +1,5 @@
 import os
 
-redis_host = os.environ.get('REDIS_HOST', 'localhost')
 db_dir = os.path.join(os.getcwd(), 'src/datastore/reviews.db')
 
 
