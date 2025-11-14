@@ -12,6 +12,7 @@ from src.scraper.scraper_service import HTMLScraper
 from src.worker.queue import RedisQueue
 from src.worker.worker import ScrapeWorker, Publisher
 from src.writer.writer import CSVWriter
+from flask_mail import Mail
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -19,13 +20,42 @@ logger = logging.getLogger(__name__)
 
 app = create_app()
 
-redis = RedisQueue(host=app.config['REDIS_HOST'])
+redis = RedisQueue(host=app.config['REDIS_HOST'], port=app.config['REDIS_PORT'])
 scraper = HTMLScraper()
 worker = ScrapeWorker(redis, scraper, db)
 
 writer = CSVWriter()
 mail_service = app.extensions["mail"]
 publisher = Publisher(redis, db, writer, mail_service)
+
+
+@app.route('/proxy', methods=['POST'])
+def set_proxy():
+    data = request.json
+
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
+    proxy = data.get('proxy', None)
+    scraper.register_proxy(proxy)
+
+    return jsonify({"message": "Proxy settings updated successfully"}), 200
+
+@app.route('/mail-server', methods=['POST'])
+def change_mail_server():
+    data = request.json
+
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
+    app.config['MAIL_USERNAME'] = data.get('username', app.config['MAIL_USERNAME'])
+    app.config['MAIL_PASSWORD'] = data.get('password', app.config['MAIL_PASSWORD'])
+
+    # Re-initialize Flask-Mail with the updated settings
+    mail_service = Mail(app)
+    publisher.registerMailService(mail_service)
+
+    return jsonify({"message": "Mail server settings updated successfully"}), 200
 
 
 @app.route('/scrape', methods=['POST'])

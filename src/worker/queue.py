@@ -1,7 +1,10 @@
 import json
+import logging
 import redis
 
 from . import MQueue
+
+logger = logging.getLogger(__name__)
 
 
 class RedisQueue(MQueue):
@@ -9,7 +12,12 @@ class RedisQueue(MQueue):
         self.client.expire(key, ttl)
 
     def __init__(self, host='localhost', port=6379, db=0):
-        self.client = redis.StrictRedis(host=host, port=port, db=db)
+        try:
+            self.client = redis.StrictRedis(host=host, port=port, db=db)
+            logger.info(f'Redis connect successfully at: {host}:{port}')
+
+        except Exception as error:
+            logger.error(f'Redis: {error}')
 
     async def push(self, item, queue=None):
         if queue is not None:
@@ -51,4 +59,3 @@ class RedisQueue(MQueue):
 
     async def publish(self, channel, message):
         await self.client.publish(channel, message)
-
